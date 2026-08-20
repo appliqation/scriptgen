@@ -8,6 +8,7 @@ import {
   createMcpClient,
   createAnthropicAdapter,
   createOpenAiAdapter,
+  createUsageAccumulator,
   resolveScenarioId,
   fetchScenarioInfo,
   resolveUrl,
@@ -17,6 +18,8 @@ import {
 } from '@appliqation/agent-core';
 import { config, resolveProvider, resolveModel } from '../config/env.js';
 import { generate } from '../orchestrator/generate.js';
+import type { GenerateResult } from '../orchestrator/generate.js';
+import { recordGenerateRun } from './audit.js';
 import { printJsonSummary, printHumanSummary, exitCodeFor } from './output.js';
 import type { GenerateSummary } from './output.js';
 
@@ -122,21 +125,36 @@ program
 
       const budget = { ...config.budget, ...(opts.maxTurns ? { maxTurns: Number(opts.maxTurns) } : {}) };
 
-      const result = await generate({
-        client,
-        adapter,
-        projectId,
-        scenarioId,
-        testCaseUuid: opts.testCaseUuid,
-        repoPath: opts.repoPath,
-        budget,
-        commandTimeoutMs: config.commandTimeoutMs,
-        filePath: opts.filePath,
-        autotestRunId: opts.autotestRunId,
-        role,
-        environmentUrl,
-        onEvent: logEvent(''),
-      });
+      const startedAt = Date.now();
+      const usage = createUsageAccumulator();
+      const baseLog = logEvent('');
+      let result: GenerateResult | undefined;
+      try {
+        result = await generate({
+          client,
+          adapter,
+          projectId,
+          scenarioId,
+          testCaseUuid: opts.testCaseUuid,
+          repoPath: opts.repoPath,
+          budget,
+          commandTimeoutMs: config.commandTimeoutMs,
+          filePath: opts.filePath,
+          autotestRunId: opts.autotestRunId,
+          role,
+          environmentUrl,
+          onEvent: (e) => {
+            baseLog(e);
+            if (e.type === 'usage') usage.onUsage(e.detail as { inputTokens: number; outputTokens: number; cacheWriteTokens?: number; cacheReadTokens?: number });
+          },
+        });
+      } finally {
+        // Audit write happens whether the run succeeded or threw — see
+        // @appliqation/agent-core's audit/sink.ts: safeRecord() (used
+        // inside recordGenerateRun) never lets a failed/unreachable audit
+        // sink affect this process's real outcome.
+        await recordGenerateRun({ sink: config.auditSink, startedAt, endedAt: Date.now(), model: resolveModel(), usage: usage.totals(), testCaseUuid: opts.testCaseUuid, result });
+      }
 
       if (!json) {
         console.log('\n=== Report ===\n');

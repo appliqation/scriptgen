@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import { DEFAULT_ANTHROPIC_MODEL, DEFAULT_OPENAI_MODEL } from '@appliqation/agent-core/providers';
 import { required, optional } from '@appliqation/agent-core/config';
+import { resolveAuditSink } from '@appliqation/agent-core/audit';
 
 export const config = {
   appqOrigin: optional('APPQ_ORIGIN') ?? 'https://appq.appliqation.io',
@@ -27,6 +28,14 @@ export const config = {
   // Wall-clock cap per run_command invocation (npm install / playwright test
   // can each legitimately take a while) — separate from the overall budget.
   commandTimeoutMs: Number(optional('COMMAND_TIMEOUT_MS') ?? 5 * 60 * 1000),
+
+  // Observability, entirely opt-in — see @appliqation/agent-core's audit/sink.ts.
+  auditSink: resolveAuditSink({
+    auditMongoUri: optional('AUDIT_MONGO_URI'),
+    auditMongoDb: optional('AUDIT_MONGO_DB'),
+    auditMongoCollection: optional('AUDIT_MONGO_COLLECTION'),
+    auditJsonlPath: optional('AUDIT_JSONL_PATH'),
+  }),
 };
 
 export function resolveProvider(): 'anthropic' | 'openai' {

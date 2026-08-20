@@ -107,6 +107,14 @@ run status rather than parsing the validator's report prose).
   per-role one. `COMMAND_TIMEOUT_MS` caps each individual `run_command` call
   (`npm install`/`playwright test` can each legitimately take a while); `BUDGET_MAX_*`
   caps the overall tool-calling loop, same shape as `appliqation-autotest`'s budget.
+  `auditSink` resolves `AUDIT_MONGO_*`/`AUDIT_JSONL_PATH` via
+  `@appliqation/agent-core/audit`'s `resolveAuditSink()` — opt-in, no-op when
+  unconfigured.
+- `src/cli/audit.ts` — `recordGenerateRun()`, extracted out of `cli/index.ts` so it's
+  testable without triggering that file's `program.parseAsync(process.argv)` side
+  effect (same reasoning as `appliqation-autotest`'s `cli/resolvers.ts`). `outcome` is
+  exactly the same shape as `GenerateSummary`; `exitCode` reuses `output.ts`'s own
+  `exitCodeFor()` rather than re-deriving the pass/fail rule a second time.
 
 ## Explicitly out of scope for v1
 
