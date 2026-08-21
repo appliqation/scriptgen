@@ -29,15 +29,18 @@ The context-gathering and drafting *methodology* itself lives in Appliqation's o
 ## Quick start
 
 ```bash
-git clone https://github.com/appliqation/appliqation-scriptgen.git
-cd appliqation-scriptgen
-npm install
-cp .env.example .env   # fill in APPQ_API_KEY and one LLM provider key
-npm run build
+npm install -g appliqation-scriptgen
+```
+
+Create a `.env` file (in whatever directory you'll run it from) with:
+
+```
+APPQ_API_KEY=your-appliqation-api-key
+ANTHROPIC_API_KEY=your-anthropic-key   # or OPENAI_API_KEY — pick one
 ```
 
 ```bash
-npx appliqation-scriptgen generate \
+appliqation-scriptgen generate \
   --test-case-uuid <uuid> \
   --repo-path /path/to/your/checkout
 ```
@@ -51,6 +54,10 @@ Copy `.env.example` to `.env`. Requires `APPQ_API_KEY` and one of `ANTHROPIC_API
 ## Development
 
 ```bash
+git clone https://github.com/appliqation/appliqation-scriptgen.git
+cd appliqation-scriptgen
+npm install
+cp .env.example .env   # fill in APPQ_API_KEY and one LLM provider key
 npm run dev -- generate --test-case-uuid <uuid> --repo-path <path>
 npm run typecheck
 npm test
