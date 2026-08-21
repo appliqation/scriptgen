@@ -1,6 +1,6 @@
 {
   "name": "appliqation-scriptgen",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Standalone agent that generates enterprise-grade Playwright automation scripts for Appliqation test cases, grounded in every available signal (manual/agentic execution evidence, defects, flakiness, sibling test cases) and verified by actually running the result.",
   "type": "module",
   "bin": {
