@@ -29,7 +29,7 @@ The context-gathering and drafting *methodology* itself lives in Appliqation's o
 ## Quick start
 
 ```bash
-npm install -g appliqation-scriptgen
+npm install -g @appliqation/scriptgen
 ```
 
 Create a `.env` file (in whatever directory you'll run it from) with:
