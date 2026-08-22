@@ -49,17 +49,61 @@ function execFileAsync(
 }
 
 // execFile inherits the FULL parent process env by default — this would hand
-// ANTHROPIC_API_KEY/APPQ_API_KEY (and, in a chained autopilot run, GITHUB_TOKEN)
-// straight to npm/npx/git and to any lifecycle script a dependency runs.
-// Pass through only what these specific allowlisted commands actually need
-// to resolve and run correctly.
-const SAFE_ENV_VARS = ['PATH', 'HOME', 'LANG', 'LC_ALL', 'TMPDIR'];
+// ANTHROPIC_API_KEY/APPQ_API_KEY (this agent's own MCP credential) and, in a
+// chained autopilot run, GITHUB_TOKEN, straight to npm/npx/git and to any
+// lifecycle script a dependency runs. But `npx playwright test` runs a real
+// generated spec that's typically built on @appliqation/automation-sdk, and
+// that SDK reads its own env vars to authenticate and report — most
+// critically APPLIQATION_API_KEY (the project's own reporting key, a
+// different credential from this agent's APPQ_API_KEY) in its Playwright
+// fixture/global-setup, and APPQ_AUTH_STATE_DIR in setupAuth(). An earlier
+// version of this allowlist stripped those too, which doesn't fail loudly —
+// a gated project's spec (or defect-fix's Phase 5 --appq-run-id reporter)
+// just can't authenticate, and that environmental failure gets reported as
+// a real product failure, exactly what this family's verification
+// discipline exists to prevent. This list is deliberately explicit — see
+// automation-sdk-js's README/.env.example for the vocabulary — not a
+// blanket APPQ_/APPLIQATION_ prefix passthrough, which would also leak this
+// agent's own APPQ_API_KEY.
+const SAFE_ENV_VARS = [
+  'PATH',
+  'HOME',
+  'LANG',
+  'LC_ALL',
+  'TMPDIR',
+  'CI',
+  'NODE_ENV',
+  'APPLIQATION_API_KEY',
+  'APPLIQATION_PROJECT_KEY',
+  'APPLIQATION_BASE_URL',
+  'APPLIQATION_SUT_BASE_URL',
+  'APPLIQATION_APP_URL',
+  'APPLIQATION_ENVIRONMENT',
+  'APPLIQATION_SCENARIO_ID',
+  'APPLIQATION_RUN_ID',
+  'APPLIQATION_RUN_TITLE',
+  'APPLIQATION_USE_JWT_AUTH',
+  'APPLIQATION_ON_SCOPE_MISMATCH',
+  'APPLIQATION_AUTO_TAG_ENABLED',
+  'APPLIQATION_AUTO_TAG_NAME',
+  'APPLIQATION_ENABLE',
+  'APPQ_ENABLE',
+  'APPQ_AUTH_STATE_DIR',
+  'APPQ_LOGIN_FILE',
+];
+
+// Per-project/role SUT credentials appq-auth-setup and a generated login.ts
+// read (APPQ_PROJECT_<id>_<ROLE>_USERNAME/_PASSWORD/_API_KEY/_API_HEADER_NAME
+// — see @appliqation/agent-core's authState.ts). A narrow shape, not a
+// blanket APPQ_ prefix, specifically so this agent's own APPQ_API_KEY (no
+// _PROJECT_<id>_ segment) can never match it.
+const SAFE_ENV_PATTERN = /^APPQ_PROJECT_\d+_[A-Z0-9_]+$/;
 
 function safeChildEnv(): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = {};
-  for (const key of SAFE_ENV_VARS) {
-    const value = process.env[key];
-    if (value !== undefined) env[key] = value;
+  for (const [key, value] of Object.entries(process.env)) {
+    if (value === undefined) continue;
+    if (SAFE_ENV_VARS.includes(key) || SAFE_ENV_PATTERN.test(key)) env[key] = value;
   }
   return env;
 }

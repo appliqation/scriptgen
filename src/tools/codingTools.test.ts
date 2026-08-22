@@ -240,14 +240,59 @@ describe('CodingTools', () => {
       expect(result.ok).toBe(false);
     });
 
-    it('does not leak the parent process env to the child — only the safe allowlist passes through', async () => {
+    it('does not leak this agent\'s own secrets to the child — ANTHROPIC/APPQ_API_KEY, GITHUB_TOKEN', async () => {
       process.env.ANTHROPIC_API_KEY = 'sk-super-secret';
+      process.env.APPQ_API_KEY = 'appq-mcp-secret';
+      process.env.GITHUB_TOKEN = 'ghp_secret';
       mockExecSuccess('ok');
       await tools.dispatch('run_command', { command: 'node', args: ['--version'] });
       const passedEnv = mockExecFile.mock.calls[0][2].env;
       expect(passedEnv.ANTHROPIC_API_KEY).toBeUndefined();
+      expect(passedEnv.APPQ_API_KEY).toBeUndefined();
+      expect(passedEnv.GITHUB_TOKEN).toBeUndefined();
       expect(passedEnv.PATH).toBe(process.env.PATH);
       delete process.env.ANTHROPIC_API_KEY;
+      delete process.env.APPQ_API_KEY;
+      delete process.env.GITHUB_TOKEN;
+    });
+
+    it('passes through @appliqation/automation-sdk\'s own env vars — a generated spec needs these to authenticate and report', async () => {
+      process.env.APPLIQATION_API_KEY = 'appq_live_secret';
+      process.env.APPQ_AUTH_STATE_DIR = '/home/user/.appq-auth';
+      process.env.APPLIQATION_SUT_BASE_URL = 'https://staging.example.com';
+      mockExecSuccess('ok');
+      await tools.dispatch('run_command', { command: 'npx', args: ['playwright', 'test'] });
+      const passedEnv = mockExecFile.mock.calls[0][2].env;
+      expect(passedEnv.APPLIQATION_API_KEY).toBe('appq_live_secret');
+      expect(passedEnv.APPQ_AUTH_STATE_DIR).toBe('/home/user/.appq-auth');
+      expect(passedEnv.APPLIQATION_SUT_BASE_URL).toBe('https://staging.example.com');
+      delete process.env.APPLIQATION_API_KEY;
+      delete process.env.APPQ_AUTH_STATE_DIR;
+      delete process.env.APPLIQATION_SUT_BASE_URL;
+    });
+
+    it('passes through per-project/role SUT credentials (APPQ_PROJECT_<id>_<ROLE>_*) via the narrow pattern', async () => {
+      process.env.APPQ_PROJECT_126_DEFAULT_USERNAME = 'tester';
+      process.env.APPQ_PROJECT_126_DEFAULT_PASSWORD = 'hunter2';
+      process.env.APPQ_PROJECT_126_MANAGER_API_KEY = 'proj-api-key';
+      mockExecSuccess('ok');
+      await tools.dispatch('run_command', { command: 'npx', args: ['playwright', 'test'] });
+      const passedEnv = mockExecFile.mock.calls[0][2].env;
+      expect(passedEnv.APPQ_PROJECT_126_DEFAULT_USERNAME).toBe('tester');
+      expect(passedEnv.APPQ_PROJECT_126_DEFAULT_PASSWORD).toBe('hunter2');
+      expect(passedEnv.APPQ_PROJECT_126_MANAGER_API_KEY).toBe('proj-api-key');
+      delete process.env.APPQ_PROJECT_126_DEFAULT_USERNAME;
+      delete process.env.APPQ_PROJECT_126_DEFAULT_PASSWORD;
+      delete process.env.APPQ_PROJECT_126_MANAGER_API_KEY;
+    });
+
+    it('the per-project pattern never matches this agent\'s own APPQ_API_KEY — no _PROJECT_<id>_ segment', async () => {
+      process.env.APPQ_API_KEY = 'appq-mcp-secret';
+      mockExecSuccess('ok');
+      await tools.dispatch('run_command', { command: 'npx', args: ['playwright', 'test'] });
+      const passedEnv = mockExecFile.mock.calls[0][2].env;
+      expect(passedEnv.APPQ_API_KEY).toBeUndefined();
+      delete process.env.APPQ_API_KEY;
     });
 
     it('appends --ignore-scripts to npm install, transparently, so a malicious package cannot run lifecycle scripts', async () => {
