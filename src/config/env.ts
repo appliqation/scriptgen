@@ -24,6 +24,9 @@ export const config = {
     maxPages: Number(optional('BUDGET_MAX_PAGES') ?? 999_999),
     maxMillis: Number(optional('BUDGET_MAX_MILLIS') ?? 20 * 60 * 1000),
     maxTurns: Number(optional('BUDGET_MAX_TURNS') ?? 60),
+    // A broad backstop against runaway spend, not a tuned budget — the other
+    // caps above are what normally end a run first. Includes cache tokens.
+    maxTotalTokens: Number(optional('BUDGET_MAX_TOTAL_TOKENS') ?? 2_000_000),
   },
   // Wall-clock cap per run_command invocation (npm install / playwright test
   // can each legitimately take a while) — separate from the overall budget.
