@@ -6,7 +6,8 @@
 // an explicit argv array — never a shell string — so the OS never parses
 // arguments as shell syntax in the first place.
 
-import { readFile, writeFile, mkdir, readdir } from 'node:fs/promises';
+import { readFile, writeFile, mkdir, readdir, realpath } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 import { resolve, dirname, relative, isAbsolute } from 'node:path';
 import { execFile } from 'node:child_process';
 import type { LlmToolDef, ToolResult } from '@appliqation/agent-core';
@@ -134,11 +135,27 @@ export class CodingTools {
     private readonly commandTimeoutMs: number,
   ) {}
 
-  private resolveScoped(relPath: string): string {
+  private async resolveScoped(relPath: string): Promise<string> {
     const resolved = resolve(this.repoPath, relPath);
     const rel = relative(this.repoPath, resolved);
     if (rel.startsWith('..') || isAbsolute(rel)) {
       throw new Error(`Path "${relPath}" escapes the target repo root — refusing.`);
+    }
+    // The check above is purely lexical — a symlink whose own path sits
+    // inside repoPath but whose target resolves outside it would pass. Walk
+    // up to the nearest existing ancestor (the target itself may not exist
+    // yet — write_file creates new files/directories) and confirm ITS real,
+    // symlink-resolved path also stays within the repo root's real path.
+    let probe = resolved;
+    while (!existsSync(probe)) {
+      const parent = dirname(probe);
+      if (parent === probe) break; // hit the filesystem root; let the real fs op fail naturally
+      probe = parent;
+    }
+    const [rootReal, probeReal] = await Promise.all([realpath(this.repoPath), realpath(probe)]);
+    const realRel = relative(rootReal, probeReal);
+    if (realRel.startsWith('..') || isAbsolute(realRel)) {
+      throw new Error(`Path "${relPath}" escapes the target repo root via a symlink — refusing.`);
     }
     return resolved;
   }
@@ -166,7 +183,7 @@ export class CodingTools {
       case 'read_file': {
         const rawPath = String(args.path ?? '');
         try {
-          const content = await readFile(this.resolveScoped(rawPath), 'utf-8');
+          const content = await readFile(await this.resolveScoped(rawPath), 'utf-8');
           return {
             ok: true,
             text: content.length > 50_000 ? `${content.slice(0, 50_000)}\n... (truncated)` : content,
@@ -178,7 +195,7 @@ export class CodingTools {
       case 'write_file': {
         const rawPath = String(args.path ?? '');
         const content = String(args.content ?? '');
-        const resolved = this.resolveScoped(rawPath);
+        const resolved = await this.resolveScoped(rawPath);
         await mkdir(dirname(resolved), { recursive: true });
         await writeFile(resolved, content, 'utf-8');
         this.writtenPaths.set(rawPath, Date.now());
@@ -187,7 +204,7 @@ export class CodingTools {
       case 'list_directory': {
         const rawPath = String(args.path ?? '.');
         try {
-          const entries = await readdir(this.resolveScoped(rawPath), { withFileTypes: true });
+          const entries = await readdir(await this.resolveScoped(rawPath), { withFileTypes: true });
           const lines = entries.map((e) => `${e.isDirectory() ? 'dir ' : 'file'}  ${e.name}`).sort();
           return { ok: true, text: lines.join('\n') || '(empty directory)' };
         } catch (err) {

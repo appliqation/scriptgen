@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { mkdtempSync, rmSync, writeFileSync, existsSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync, existsSync, symlinkSync, mkdirSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -85,6 +85,67 @@ describe('CodingTools', () => {
       // let the model escape the sandbox by just passing an absolute path.
       const result = await tools.dispatch('read_file', { path: '/etc/passwd' });
       expect(result.ok).toBe(false);
+    });
+
+    describe('symlinks — the lexical check above can\'t catch these', () => {
+      let outsideDir: string;
+
+      beforeEach(() => {
+        outsideDir = mkdtempSync(join(tmpdir(), 'scriptgen-outside-'));
+        writeFileSync(join(outsideDir, 'secret.txt'), 'top secret');
+      });
+
+      afterEach(() => {
+        rmSync(outsideDir, { recursive: true, force: true });
+      });
+
+      it('refuses to read through a symlinked directory whose target resolves outside the repo root', async () => {
+        symlinkSync(outsideDir, join(dir, 'escape'), 'dir');
+        const result = await tools.dispatch('read_file', { path: 'escape/secret.txt' });
+        expect(result.ok).toBe(false);
+        expect(result.text).toMatch(/escapes the target repo root via a symlink/);
+      });
+
+      it('refuses to write through a symlinked directory, and never touches the real target', async () => {
+        symlinkSync(outsideDir, join(dir, 'escape'), 'dir');
+        await expect(
+          tools.dispatch('write_file', { path: 'escape/pwned.txt', content: 'gotcha' }),
+        ).rejects.toThrow(/escapes the target repo root via a symlink/);
+        expect(existsSync(join(outsideDir, 'pwned.txt'))).toBe(false);
+      });
+
+      it('refuses to list a symlinked directory whose target resolves outside the repo root', async () => {
+        symlinkSync(outsideDir, join(dir, 'escape'), 'dir');
+        const result = await tools.dispatch('list_directory', { path: 'escape' });
+        expect(result.ok).toBe(false);
+        expect(result.text).toMatch(/escapes the target repo root via a symlink/);
+      });
+
+      it('refuses a direct symlink to a file outside the repo root (not just a symlinked directory)', async () => {
+        symlinkSync(join(outsideDir, 'secret.txt'), join(dir, 'link.txt'), 'file');
+        const result = await tools.dispatch('read_file', { path: 'link.txt' });
+        expect(result.ok).toBe(false);
+        expect(result.text).toMatch(/escapes the target repo root via a symlink/);
+      });
+
+      it('still allows a symlink whose target resolves within the repo root', async () => {
+        mkdirSync(join(dir, 'real-subdir'));
+        writeFileSync(join(dir, 'real-subdir', 'file.txt'), 'inside content');
+        symlinkSync(join(dir, 'real-subdir'), join(dir, 'alias'), 'dir');
+
+        const result = await tools.dispatch('read_file', { path: 'alias/file.txt' });
+        expect(result.ok).toBe(true);
+        expect(result.text).toBe('inside content');
+      });
+
+      it('does not break writing a genuinely new file in a not-yet-created nested directory (no symlink involved)', async () => {
+        // Regression check: the realpath walk-up-to-nearest-existing-ancestor
+        // logic must not misfire for the ordinary "mkdir -p" case every
+        // other write_file test already relies on.
+        const result = await tools.dispatch('write_file', { path: 'brand/new/nested/file.ts', content: 'x' });
+        expect(result.ok).toBe(true);
+        expect(readFileSync(join(dir, 'brand/new/nested/file.ts'), 'utf-8')).toBe('x');
+      });
     });
   });
 
