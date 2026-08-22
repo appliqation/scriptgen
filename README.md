@@ -23,7 +23,7 @@ flowchart TD
 
 The context-gathering and drafting *methodology* itself lives in Appliqation's own `appq:automate` MCP prompt — this repo is deliberately thin: it just gives that workflow two tool surfaces (read-only Appliqation context tools, and real filesystem + an allowlisted shell) and lets it do the work.
 
-- **No appq write tool, no git operation.** This agent writes local files only — nothing is synced back to Appliqation and nothing is committed. [`appliqation-pr-raise`](https://github.com/appliqation/appliqation-pr-raise) handles turning the result into a real PR.
+- **No appq write tool, no git operation.** This agent writes local files only — nothing is synced back to Appliqation and nothing is committed. [`appliqation-pr-raise`](https://github.com/appliqation/pr-raise) handles turning the result into a real PR.
 - **A hardcoded, non-negotiable shell allowlist.** `npm init/install -D`, `npx playwright install/--version/test`, `node --version`, `git status/diff` — nothing else can run, checked before execution, spawned via `execFile` with an explicit argv array (never a shell string).
 
 ## Quick start
@@ -45,7 +45,7 @@ appliqation-scriptgen generate \
   --repo-path /path/to/your/checkout
 ```
 
-Add `--environment <name>` if the target repo needs a fresh Playwright config bootstrapped (its `baseURL` context), `--role <name>` to authenticate as a specific role (otherwise inferred per-TC automatically), `--autotest-run-id <id>` to ground the draft in a prior [`appliqation-autotest`](https://github.com/appliqation/appliqation-autotest) run's real execution evidence, and `--json`/`--ci` for a structured summary + CI-friendly exit code.
+Add `--environment <name>` if the target repo needs a fresh Playwright config bootstrapped (its `baseURL` context), `--role <name>` to authenticate as a specific role (otherwise inferred per-TC automatically), `--autotest-run-id <id>` to ground the draft in a prior [`appliqation-autotest`](https://github.com/appliqation/autotest) run's real execution evidence, and `--json`/`--ci` for a structured summary + CI-friendly exit code.
 
 ## Configuration
 
@@ -54,8 +54,8 @@ Copy `.env.example` to `.env`. Requires `APPQ_API_KEY` and one of `ANTHROPIC_API
 ## Development
 
 ```bash
-git clone https://github.com/appliqation/appliqation-scriptgen.git
-cd appliqation-scriptgen
+git clone https://github.com/appliqation/scriptgen.git
+cd scriptgen
 npm install
 cp .env.example .env   # fill in APPQ_API_KEY and one LLM provider key
 npm run dev -- generate --test-case-uuid <uuid> --repo-path <path>
