@@ -51,6 +51,20 @@ Add `--environment <name>` if the target repo needs a fresh Playwright config bo
 
 Copy `.env.example` to `.env`. Requires `APPQ_API_KEY` and one of `ANTHROPIC_API_KEY`/`OPENAI_API_KEY`.
 
+## Running this safely
+
+This is the one agent in the family with a real shell (`npm`/`npx`/`git`, gated by `commandGate.ts`'s hardcoded allowlist) and filesystem surface, driven by the model's own decisions about what to bootstrap and write. `run_command`'s child processes get a scoped, explicit env allowlist, not this process's full environment — but that allowlist deliberately includes `@appliqation/automation-sdk`'s own vars (`APPLIQATION_API_KEY`, `APPQ_AUTH_STATE_DIR`, per-project SUT credentials), since the generated spec genuinely needs them to authenticate and report. That's the correct trade-off — the spec has to actually run — but it does mean a real project credential is reachable from whatever `npx playwright test` executes.
+
+**Run this inside a container with an egress allowlist**, not directly on a machine with broad network access. This process (and what it spawns) only ever legitimately needs to reach:
+
+- your LLM provider (`api.anthropic.com` or `api.openai.com`)
+- your configured `APPQ_ORIGIN` (`appq.appliqation.io` by default)
+- `registry.npmjs.org` — only while `npm install -D` actually runs
+- Playwright's browser-download host — only while `npx playwright install` actually runs
+- the project's own site under test — wherever the generated spec/`login.ts` points
+
+Anything else this process (or a spawned `npm`/`npx`/`git` command) tries to reach is unexpected and worth investigating, not routing around.
+
 ## Development
 
 ```bash
