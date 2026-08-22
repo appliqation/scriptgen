@@ -178,6 +178,36 @@ describe('CodingTools', () => {
       // the tool call itself is ground truth and cannot be talked around.
       expect(result.ok).toBe(false);
     });
+
+    it('does not leak the parent process env to the child — only the safe allowlist passes through', async () => {
+      process.env.ANTHROPIC_API_KEY = 'sk-super-secret';
+      mockExecSuccess('ok');
+      await tools.dispatch('run_command', { command: 'node', args: ['--version'] });
+      const passedEnv = mockExecFile.mock.calls[0][2].env;
+      expect(passedEnv.ANTHROPIC_API_KEY).toBeUndefined();
+      expect(passedEnv.PATH).toBe(process.env.PATH);
+      delete process.env.ANTHROPIC_API_KEY;
+    });
+
+    it('appends --ignore-scripts to npm install, transparently, so a malicious package cannot run lifecycle scripts', async () => {
+      mockExecSuccess('added 1 package');
+      await tools.dispatch('run_command', { command: 'npm', args: ['install', '-D', '@playwright/test'] });
+      expect(mockExecFile).toHaveBeenCalledWith(
+        'npm',
+        ['install', '-D', '@playwright/test', '--ignore-scripts'],
+        expect.anything(),
+        expect.any(Function),
+      );
+      const history = tools.getCommandHistory();
+      expect(history[0].args).toContain('--ignore-scripts');
+    });
+
+    it('does not duplicate --ignore-scripts if the model already passed it', async () => {
+      mockExecSuccess('added 1 package');
+      await tools.dispatch('run_command', { command: 'npm', args: ['install', '-D', '@playwright/test', '--ignore-scripts'] });
+      const [, calledArgs] = mockExecFile.mock.calls[0];
+      expect(calledArgs.filter((a: string) => a === '--ignore-scripts')).toHaveLength(1);
+    });
   });
 
   describe('dispatch — unknown tool', () => {

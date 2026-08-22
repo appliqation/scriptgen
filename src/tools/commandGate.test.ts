@@ -33,6 +33,10 @@ describe('assertCommandAllowed — npm', () => {
     expect(allowed('npm', ['install', '-D', '--unsafe-perm'])).toBe(false);
   });
 
+  it('allows --ignore-scripts alongside package specs — codingTools.ts appends it automatically', () => {
+    expect(allowed('npm', ['install', '-D', '@playwright/test', '--ignore-scripts'])).toBe(true);
+  });
+
   it('rejects a package spec containing path traversal', () => {
     expect(allowed('npm', ['install', '-D', '../../etc/passwd'])).toBe(false);
   });

@@ -31,7 +31,7 @@ interface ExecFailure extends Error {
 function execFileAsync(
   command: string,
   args: string[],
-  options: { cwd: string; timeout: number; maxBuffer: number },
+  options: { cwd: string; timeout: number; maxBuffer: number; env: NodeJS.ProcessEnv },
 ): Promise<ExecOutcome> {
   return new Promise((resolvePromise, rejectPromise) => {
     execFile(command, args, options, (error, stdout, stderr) => {
@@ -45,6 +45,35 @@ function execFileAsync(
       }
     });
   });
+}
+
+// execFile inherits the FULL parent process env by default — this would hand
+// ANTHROPIC_API_KEY/APPQ_API_KEY (and, in a chained autopilot run, GITHUB_TOKEN)
+// straight to npm/npx/git and to any lifecycle script a dependency runs.
+// Pass through only what these specific allowlisted commands actually need
+// to resolve and run correctly.
+const SAFE_ENV_VARS = ['PATH', 'HOME', 'LANG', 'LC_ALL', 'TMPDIR'];
+
+function safeChildEnv(): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = {};
+  for (const key of SAFE_ENV_VARS) {
+    const value = process.env[key];
+    if (value !== undefined) env[key] = value;
+  }
+  return env;
+}
+
+// npm runs a package's preinstall/install/postinstall scripts by default —
+// the actual code-execution mechanism behind a typosquatted or hallucinated
+// package name. commandGate.ts already restricts what can be installed by
+// shape; this closes what that shape check can't: what a malicious package's
+// own install scripts would do. Applied transparently so the model never
+// needs to know to ask for it, and never duplicated if it already did.
+function withSafetyFlags(command: string, args: string[]): string[] {
+  if (command === 'npm' && args[0] === 'install' && !args.includes('--ignore-scripts')) {
+    return [...args, '--ignore-scripts'];
+  }
+  return args;
 }
 
 export const CODING_TOOL_DEFS: LlmToolDef[] = [
@@ -181,19 +210,21 @@ export class CodingTools {
   }
 
   private async runAllowed(command: string, cmdArgs: string[]): Promise<ToolResult> {
+    const execArgs = withSafetyFlags(command, cmdArgs);
     try {
-      const { stdout, stderr } = await execFileAsync(command, cmdArgs, {
+      const { stdout, stderr } = await execFileAsync(command, execArgs, {
         cwd: this.repoPath,
         timeout: this.commandTimeoutMs,
         maxBuffer: 10 * 1024 * 1024,
+        env: safeChildEnv(),
       });
-      this.commandHistory.push({ command, args: cmdArgs, exitCode: 0, ok: true, timestamp: Date.now() });
+      this.commandHistory.push({ command, args: execArgs, exitCode: 0, ok: true, timestamp: Date.now() });
       const out = `${stdout}${stderr ? `\n[stderr]\n${stderr}` : ''}`.trim();
       return { ok: true, text: out.length > 20_000 ? out.slice(-20_000) : out || '(no output, exit 0)' };
     } catch (err) {
       const e = err as ExecFailure;
       const exitCode = typeof e.code === 'number' ? e.code : null;
-      this.commandHistory.push({ command, args: cmdArgs, exitCode, ok: false, timestamp: Date.now() });
+      this.commandHistory.push({ command, args: execArgs, exitCode, ok: false, timestamp: Date.now() });
       const out = `${e.stdout ?? ''}\n[stderr]\n${e.stderr ?? e.message}`.trim();
       return { ok: false, text: out.length > 20_000 ? out.slice(-20_000) : out };
     }

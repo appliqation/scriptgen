@@ -29,9 +29,14 @@ type Validator = (args: string[]) => boolean;
 const ALLOWED_COMMANDS: Record<string, Validator> = {
   npm: (args) => {
     if (args.length === 2 && args[0] === 'init' && args[1] === '-y') return true;
-    // npm install -D <package...> — dev deps only, plain package specs only.
+    // npm install -D <package...> [--ignore-scripts] — dev deps only, plain package
+    // specs only. --ignore-scripts is the one bare flag allowed here: codingTools.ts
+    // appends it to every install automatically (it's what stops a malicious/
+    // typosquatted package's own preinstall/postinstall scripts from running), so
+    // this just means the gate doesn't reject its own safety flag coming back
+    // through on the args a model might echo.
     if (args.length >= 3 && args[0] === 'install' && args[1] === '-D') {
-      return args.slice(2).every(isPlainPackageSpec);
+      return args.slice(2).every((a) => a === '--ignore-scripts' || isPlainPackageSpec(a));
     }
     return false;
   },
