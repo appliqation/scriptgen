@@ -6,7 +6,7 @@ const usage = { inputTokens: 100, outputTokens: 50, cacheWriteTokens: 0, cacheRe
 
 describe('recordGenerateRun', () => {
   it('records one call with agent/subcommand and the outcome shaped like GenerateSummary', async () => {
-    const sink: AuditSink = { record: vi.fn().mockResolvedValue(undefined) };
+    const sink: AuditSink = { record: vi.fn().mockResolvedValue(undefined), close: vi.fn().mockResolvedValue(undefined) };
     await recordGenerateRun({
       sink,
       startedAt: 1000,
@@ -30,7 +30,7 @@ describe('recordGenerateRun', () => {
   });
 
   it('exitCode is 1 when the script never verified — matches the CLI\'s own exitCodeFor()', async () => {
-    const sink: AuditSink = { record: vi.fn().mockResolvedValue(undefined) };
+    const sink: AuditSink = { record: vi.fn().mockResolvedValue(undefined), close: vi.fn().mockResolvedValue(undefined) };
     await recordGenerateRun({
       sink,
       startedAt: 0,
@@ -45,7 +45,7 @@ describe('recordGenerateRun', () => {
   });
 
   it('records exitCode 1 and an error outcome when result is undefined — generate() threw', async () => {
-    const sink: AuditSink = { record: vi.fn().mockResolvedValue(undefined) };
+    const sink: AuditSink = { record: vi.fn().mockResolvedValue(undefined), close: vi.fn().mockResolvedValue(undefined) };
     await recordGenerateRun({ sink, startedAt: 0, endedAt: 1, model: 'x', usage, testCaseUuid: 'tc-1', result: undefined });
     const record = (sink.record as ReturnType<typeof vi.fn>).mock.calls[0][0];
     expect(record.exitCode).toBe(1);
@@ -53,7 +53,7 @@ describe('recordGenerateRun', () => {
   });
 
   it('a sink failure never rejects — safeRecord swallows it', async () => {
-    const sink: AuditSink = { record: vi.fn().mockRejectedValue(new Error('down')) };
+    const sink: AuditSink = { record: vi.fn().mockRejectedValue(new Error('down')), close: vi.fn().mockResolvedValue(undefined) };
     vi.spyOn(console, 'error').mockImplementation(() => {});
     await expect(
       recordGenerateRun({
@@ -66,5 +66,18 @@ describe('recordGenerateRun', () => {
         result: { report: 'r', turns: 1, budgetExceeded: false, writtenPaths: [], testRun: { ran: true, ok: true, exitCode: 0 } },
       }),
     ).resolves.toBeUndefined();
+  });
+
+  it('closes the sink after recording — N-03: an unclosed Mongo client hangs the process since this CLI never calls process.exit()', async () => {
+    const sink: AuditSink = { record: vi.fn().mockResolvedValue(undefined), close: vi.fn().mockResolvedValue(undefined) };
+    await recordGenerateRun({ sink, startedAt: 0, endedAt: 1, model: 'x', usage, testCaseUuid: 'tc-1', result: undefined });
+    expect(sink.close).toHaveBeenCalledTimes(1);
+  });
+
+  it('still closes the sink even when record() failed', async () => {
+    const sink: AuditSink = { record: vi.fn().mockRejectedValue(new Error('down')), close: vi.fn().mockResolvedValue(undefined) };
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    await recordGenerateRun({ sink, startedAt: 0, endedAt: 1, model: 'x', usage, testCaseUuid: 'tc-1', result: undefined });
+    expect(sink.close).toHaveBeenCalledTimes(1);
   });
 });

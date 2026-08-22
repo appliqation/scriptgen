@@ -2,7 +2,7 @@
 // file's top-level program.parseAsync(process.argv) side effect — same
 // reasoning as appliqation-autotest's cli/resolvers.ts.
 
-import { safeRecord, type AuditSink, type AuditRecord } from '@appliqation/agent-core';
+import { safeRecord, safeClose, type AuditSink, type AuditRecord } from '@appliqation/agent-core';
 import type { GenerateResult } from '../orchestrator/generate.js';
 import { exitCodeFor } from './output.js';
 import type { GenerateSummary } from './output.js';
@@ -37,4 +37,5 @@ export async function recordGenerateRun(args: RecordGenerateRunArgs): Promise<vo
     exitCode: summary ? exitCodeFor(summary) : 1,
     outcome: summary ? { ...summary } : { testCaseUuid, error: true },
   });
+  await safeClose(sink);
 }
