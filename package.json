@@ -1,6 +1,6 @@
 {
   "name": "@appliqation/scriptgen",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Standalone agent that generates enterprise-grade Playwright automation scripts for Appliqation test cases, grounded in every available signal (manual/agentic execution evidence, defects, flakiness, sibling test cases) and verified by actually running the result.",
   "license": "MIT",
   "repository": {
@@ -32,7 +32,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@appliqation/agent-core": "^0.1.5",
+    "@appliqation/agent-core": "^0.1.7",
     "@appliqation/automation-sdk": "^2.7.0",
     "commander": "^13.1.0",
     "dotenv": "^16.4.7"
