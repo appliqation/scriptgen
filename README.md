@@ -47,6 +47,29 @@ appliqation-scriptgen generate \
 
 Add `--environment <name>` if the target repo needs a fresh Playwright config bootstrapped (its `baseURL` context), `--role <name>` to authenticate as a specific role (otherwise inferred per-TC automatically), `--autotest-run-id <id>` to ground the draft in a prior [`appliqation-autotest`](https://github.com/appliqation/autotest) run's real execution evidence, and `--json`/`--ci` for a structured summary + CI-friendly exit code.
 
+## CLI reference
+
+`appliqation-scriptgen generate [options]`
+
+**Required:**
+
+| Option | Description |
+|---|---|
+| `--test-case-uuid <uuid>` | Test case UUID to generate a script for. |
+
+**Optional:**
+
+| Option | Description |
+|---|---|
+| `--environment <name>` | Environment name — its URL (from `get_project_settings`) is offered as context for the target app's `baseURL`, only if the target repo needs a Playwright config bootstrapped from scratch. |
+| `--role <name>` | Authenticate as this role in the generated script (`setupAuth`). Omit for per-TC inference from the TC's own tag/name (same mechanism `appliqation-autotest` uses), or for ungated projects where neither applies. |
+| `--autotest-run-id <id>` | A prior `appliqation-autotest` run for this TC. Passed straight through as `appq:automate`'s `autotest_run_id` arg — pulls that run's execution evidence and switches to autonomous mode (no confirmation steps, no live-browsing phase). |
+| `--repo-path <path>` | Target repo root every file/command tool call is scoped to. Defaults to the current directory. |
+| `--file-path <path>` | Local spec file to extend or create. Omit to let the AI discover/propose one. |
+| `--max-turns <n>` | Override `BUDGET_MAX_TURNS` for this run. |
+| `--json` | Print a single structured JSON summary on stdout instead of a human-readable report. |
+| `--ci` | Shorthand for `--json`; exit code already reflects the real, `execFile`-verified outcome either way. |
+
 ## Configuration
 
 Copy `.env.example` to `.env`. Requires `APPQ_API_KEY` and one of `ANTHROPIC_API_KEY`/`OPENAI_API_KEY`.
